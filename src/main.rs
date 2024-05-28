@@ -80,11 +80,11 @@ fn get_display(bpm: u8, minutes_ago: u8) -> String {
     let minutes_str = match minutes_ago {
         MINUTES_THRESHOLD.. => {
             // it's been too long since the last reading
-            format!("{} {} {}", LEFT_ALERT, minutes_ago.to_string(), RIGHT_ALERT)
+            format!("{} {}m {}", LEFT_ALERT, minutes_ago.to_string(), RIGHT_ALERT)
         }
-        _ => minutes_ago.to_string(),
+        _ => format!("{}m", minutes_ago)
     };
-    format!("{} | {}m", bpm_str, minutes_str)
+    format!("{} | {}", bpm_str, minutes_str)
 }
 
 fn main() {
