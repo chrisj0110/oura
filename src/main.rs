@@ -3,7 +3,7 @@ use std::env;
 use std::process::{Command, Stdio};
 use std::str;
 
-const BPM_ALERT_THRESHOLD: u8 = 75; // if bpm is above this, alert
+const BPM_ALERT_THRESHOLD: u8 = 80; // if bpm is above this, alert
 const MINUTES_THRESHOLD: u8 = 60; // if it's been this many minutes since the last reading, alert
 
 fn get_api_url(now: DateTime<Utc>) -> String {
