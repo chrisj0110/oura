@@ -6,6 +6,7 @@ use std::str;
 const BPM_ALERT_THRESHOLD: u8 = 80; // if bpm is above this, alert
 const MINUTES_THRESHOLD: u8 = 60; // if it's been this many minutes since the last reading, alert
 
+#[allow(clippy::identity_op)]
 fn get_api_url(now: DateTime<Utc>) -> String {
     const START_TIME_DELTA: i64 = 6 * 60 * 60; // start n hours before now
     const END_TIME_DELTA: i64 = 1 * 60; // end n minutes after current time
@@ -32,7 +33,9 @@ fn get_api_url(now: DateTime<Utc>) -> String {
     )
 }
 
-fn get_bpm_and_minutes_ago(now: DateTime<Utc>) -> (u8, u8) { // return bpm, and minutes since the last reading
+fn get_bpm_and_minutes_ago(now: DateTime<Utc>) -> (u8, u8) {
+    // return bpm, and minutes since the last reading
+
     let token = env::var("OURA_ACCESS_TOKEN")
         .expect("Failed to get OURA_ACCESS_TOKEN environment variable");
 
@@ -57,13 +60,16 @@ fn get_bpm_and_minutes_ago(now: DateTime<Utc>) -> (u8, u8) { // return bpm, and 
 
     let output = jq_command.wait_with_output().unwrap();
     let result = str::from_utf8(&output.stdout).unwrap().to_string();
-    let (bpm_str, timestamp_str) = result.trim().split_once(" ").unwrap();
+    let (bpm_str, timestamp_str) = result.trim().split_once(' ').unwrap();
 
     let minutes_ago = now
         .signed_duration_since(DateTime::parse_from_rfc3339(timestamp_str).unwrap())
         .num_minutes();
 
-    (bpm_str.parse::<u8>().unwrap(), minutes_ago.try_into().unwrap())
+    (
+        bpm_str.parse::<u8>().unwrap(),
+        minutes_ago.try_into().unwrap(),
+    )
 }
 
 fn get_display(bpm: u8, minutes_ago: u8) -> String {
@@ -73,16 +79,16 @@ fn get_display(bpm: u8, minutes_ago: u8) -> String {
     let bpm_str = match bpm {
         BPM_ALERT_THRESHOLD.. => {
             // bpm is too high
-            format!("{} {} {}", LEFT_ALERT, bpm.to_string(), RIGHT_ALERT)
+            format!("{} {} {}", LEFT_ALERT, bpm, RIGHT_ALERT)
         }
         _ => bpm.to_string(),
     };
     let minutes_str = match minutes_ago {
         MINUTES_THRESHOLD.. => {
             // it's been too long since the last reading
-            format!("{} {}m {}", LEFT_ALERT, minutes_ago.to_string(), RIGHT_ALERT)
+            format!("{} {}m {}", LEFT_ALERT, minutes_ago, RIGHT_ALERT)
         }
-        _ => format!("{}m", minutes_ago)
+        _ => format!("{}m", minutes_ago),
     };
     format!("{} | {}", bpm_str, minutes_str)
 }
