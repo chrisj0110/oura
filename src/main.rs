@@ -6,34 +6,32 @@ use std::str;
 const BPM_ALERT_THRESHOLD: u8 = 80; // if bpm is above this, alert
 const MINUTES_THRESHOLD: u8 = 60; // if it's been this many minutes since the last reading, alert
 
+struct HeartData {
+    bpm: u8,
+    minutes_ago: u8,
+}
+
 #[allow(clippy::identity_op)]
 fn get_api_url(now: DateTime<Utc>) -> String {
-    const START_TIME_DELTA: i64 = 6 * 60 * 60; // start n hours before now
+    const START_TIME_DELTA: i64 = 2 * 60 * 60; // start n hours before now
     const END_TIME_DELTA: i64 = 1 * 60; // end n minutes after current time
 
-    let start_datetime = format!(
-        "{}",
+    format!(
+        "https://api.ouraring.com/v2/usercollection/heartrate?start_datetime={}&end_datetime={}",
         now.checked_sub_signed(
             TimeDelta::new(START_TIME_DELTA, 0).expect("Failed to get start TimeDelta")
         )
         .unwrap()
-        .format("%Y-%m-%dT%H:%M:%S")
-    );
-    let end_datetime = format!(
-        "{}",
+        .format("%Y-%m-%dT%H:%M:%S"),
         now.checked_add_signed(
             TimeDelta::new(END_TIME_DELTA, 0).expect("Failed to get end TimeDelta")
         )
         .unwrap()
         .format("%Y-%m-%dT%H:%M:%S")
-    );
-    format!(
-        "https://api.ouraring.com/v2/usercollection/heartrate?start_datetime={}&end_datetime={}",
-        start_datetime, end_datetime
     )
 }
 
-fn get_bpm_and_minutes_ago(now: DateTime<Utc>) -> (u8, u8) {
+fn get_bpm_and_minutes_ago(now: DateTime<Utc>) -> HeartData {
     // return bpm, and minutes since the last reading
 
     let token = env::var("OURA_ACCESS_TOKEN")
@@ -62,39 +60,85 @@ fn get_bpm_and_minutes_ago(now: DateTime<Utc>) -> (u8, u8) {
     let result = str::from_utf8(&output.stdout).unwrap().to_string();
     let (bpm_str, timestamp_str) = result.trim().split_once(' ').unwrap();
 
-    let minutes_ago = now
-        .signed_duration_since(DateTime::parse_from_rfc3339(timestamp_str).unwrap())
-        .num_minutes();
+    HeartData {
+        bpm: bpm_str.parse::<u8>().unwrap(),
+        minutes_ago: now
+            .signed_duration_since(DateTime::parse_from_rfc3339(timestamp_str).unwrap())
+            .num_minutes()
+            .try_into()
+            .unwrap(),
+    }
+}
 
-    (
-        bpm_str.parse::<u8>().unwrap(),
-        minutes_ago.try_into().unwrap(),
+fn alert_wrap(content: &str) -> String {
+    format!(">>>>> {} <<<<<", content)
+}
+
+fn get_display(heart_data: HeartData) -> String {
+    format!(
+        "{} | {}",
+        match heart_data.bpm >= BPM_ALERT_THRESHOLD {
+            true => alert_wrap(&heart_data.bpm.to_string()),
+            false => heart_data.bpm.to_string(),
+        },
+        match heart_data.minutes_ago >= MINUTES_THRESHOLD {
+            true => alert_wrap(format!("{}m", heart_data.minutes_ago).as_str()), // data too stale
+            false => format!("{}m", heart_data.minutes_ago),
+        },
     )
 }
 
-fn get_display(bpm: u8, minutes_ago: u8) -> String {
-    const LEFT_ALERT: &str = ">>>>>";
-    const RIGHT_ALERT: &str = "<<<<<";
-
-    let bpm_str = match bpm {
-        BPM_ALERT_THRESHOLD.. => {
-            // bpm is too high
-            format!("{} {} {}", LEFT_ALERT, bpm, RIGHT_ALERT)
-        }
-        _ => bpm.to_string(),
-    };
-    let minutes_str = match minutes_ago {
-        MINUTES_THRESHOLD.. => {
-            // it's been too long since the last reading
-            format!("{} {}m {}", LEFT_ALERT, minutes_ago, RIGHT_ALERT)
-        }
-        _ => format!("{}m", minutes_ago),
-    };
-    format!("{} | {}", bpm_str, minutes_str)
+fn main() {
+    println!(
+        "{}",
+        get_display(get_bpm_and_minutes_ago(chrono::Utc::now()))
+    );
 }
 
-fn main() {
-    let now = chrono::Utc::now();
-    let (bpm, minutes_ago) = get_bpm_and_minutes_ago(now);
-    println!("{}", get_display(bpm, minutes_ago));
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_get_api_url() {
+        let api = get_api_url(chrono::Utc::now());
+        assert!(api.contains("api.ouraring.com"));
+    }
+
+    #[test]
+    fn test_alert_wrap() {
+        assert_eq!(alert_wrap("testing"), ">>>>> testing <<<<<");
+    }
+
+    #[test]
+    fn test_get_display() {
+        assert_eq!(
+            get_display(HeartData {
+                bpm: 70,
+                minutes_ago: 10
+            }),
+            "70 | 10m"
+        );
+        assert_eq!(
+            get_display(HeartData {
+                bpm: 90,
+                minutes_ago: 10
+            }),
+            ">>>>> 90 <<<<< | 10m"
+        );
+        assert_eq!(
+            get_display(HeartData {
+                bpm: 70,
+                minutes_ago: 70
+            }),
+            "70 | >>>>> 70m <<<<<"
+        );
+        assert_eq!(
+            get_display(HeartData {
+                bpm: 90,
+                minutes_ago: 70
+            }),
+            ">>>>> 90 <<<<< | >>>>> 70m <<<<<"
+        );
+    }
 }
