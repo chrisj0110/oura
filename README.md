@@ -12,3 +12,7 @@ It will grab your attention when either of these values go over the thresholds s
 
 For this to work you need to set an Oura [personal access token](https://cloud.ouraring.com/docs/authentication#personal-access-tokens) in an environment variable `OURA_ACCESS_TOKEN`.
 
+I made this so that I could put it in the lower-right of my tmux window, and notice to take a break when necessary:
+
+![oura-heartrate-tmux](doc/oura-heartrate-tmux.png)
+
