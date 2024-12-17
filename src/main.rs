@@ -1,6 +1,7 @@
-use chrono::{DateTime, TimeDelta, Utc};
+use chrono::{DateTime, Days, Utc};
+use serde::Deserialize;
+use reqwest::Client;
 use std::env;
-use std::process::{Command, Stdio};
 use std::str;
 
 const BPM_ALERT_THRESHOLD: u8 = 80; // if bpm is above this, alert
@@ -11,62 +12,50 @@ struct HeartData {
     minutes_ago: u8,
 }
 
-#[allow(clippy::identity_op)]
-fn get_api_url(now: DateTime<Utc>) -> String {
-    const START_TIME_DELTA: i64 = 2 * 60 * 60; // start n hours before now
-    const END_TIME_DELTA: i64 = 1 * 60; // end n minutes after current time
-
-    format!(
-        "https://api.ouraring.com/v2/usercollection/heartrate?start_datetime={}&end_datetime={}",
-        now.checked_sub_signed(
-            TimeDelta::new(START_TIME_DELTA, 0).expect("Failed to get start TimeDelta")
-        )
-        .unwrap()
-        .format("%Y-%m-%dT%H:%M:%S"),
-        now.checked_add_signed(
-            TimeDelta::new(END_TIME_DELTA, 0).expect("Failed to get end TimeDelta")
-        )
-        .unwrap()
-        .format("%Y-%m-%dT%H:%M:%S")
-    )
+#[derive(Deserialize, Debug)]
+struct OuraHeartbeat {
+    bpm: u8,
+    #[allow(dead_code)]
+    source: String,
+    timestamp: DateTime<Utc>,
 }
 
-fn get_bpm_and_minutes_ago(now: DateTime<Utc>) -> HeartData {
-    // return bpm, and minutes since the last reading
+#[derive(Deserialize, Debug)]
+struct OuraResponse {
+    data: Vec<OuraHeartbeat>,
+    #[allow(dead_code)]
+    next_token: Option<String>,
+}
 
+// return bpm, and minutes since the last reading
+async fn get_bpm_and_minutes_ago(now: DateTime<Utc>) -> HeartData {
     let token = env::var("OURA_ACCESS_TOKEN")
         .expect("Failed to get OURA_ACCESS_TOKEN environment variable");
 
-    let command = Command::new("curl")
-        .arg("--silent")
-        .arg("-X")
-        .arg("GET")
-        .arg(get_api_url(now))
-        .arg("-H")
-        .arg(format!("Authorization: Bearer {}", token))
-        .stdout(Stdio::piped())
-        .spawn()
+    let yesterday = now.checked_sub_days(Days::new(1));
+
+    let response = Client::new()
+        .get(format!("https://api.ouraring.com/v2/usercollection/heartrate?start_datetime={}", yesterday.unwrap().format("%Y-%m-%dT%H:%M:%S")))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json::<OuraResponse>()
+        .await
         .unwrap();
 
-    let jq_command = Command::new("jq")
-        .arg("-r")
-        .arg(".data | last | \"\\(.bpm) \\(.timestamp)\"")
-        .stdin(Stdio::from(command.stdout.unwrap()))
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
+    let last_heartbeat = response.data.last();
 
-    let output = jq_command.wait_with_output().unwrap();
-    let result = str::from_utf8(&output.stdout).unwrap().to_string();
-    let (bpm_str, timestamp_str) = result.trim().split_once(' ').unwrap();
+    let chicago_tz: chrono_tz::Tz = chrono_tz::America::Chicago;
+    let now_chicago = Utc::now().with_timezone(&chicago_tz);
+
+    // Calculate the difference in minutes
+    let duration = now_chicago.signed_duration_since(last_heartbeat.unwrap().timestamp);
+    let minutes_ago = duration.num_minutes();
 
     HeartData {
-        bpm: bpm_str.parse::<u8>().unwrap(),
-        minutes_ago: now
-            .signed_duration_since(DateTime::parse_from_rfc3339(timestamp_str).unwrap())
-            .num_minutes()
-            .try_into()
-            .unwrap(),
+        bpm: last_heartbeat.unwrap().bpm,
+        minutes_ago: minutes_ago.try_into().unwrap(),
     }
 }
 
@@ -88,22 +77,17 @@ fn get_display(heart_data: HeartData) -> String {
     )
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     println!(
         "{}",
-        get_display(get_bpm_and_minutes_ago(chrono::Utc::now()))
+        get_display(get_bpm_and_minutes_ago(chrono::Utc::now()).await)
     );
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[test]
-    fn test_get_api_url() {
-        let api = get_api_url(chrono::Utc::now());
-        assert!(api.contains("api.ouraring.com"));
-    }
 
     #[test]
     fn test_alert_wrap() {
