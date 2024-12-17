@@ -1,5 +1,7 @@
 # Getting last heart rate from Oura
 
+UPDATE: Something seems to have changed with the oura API that it's not returning real-time stats anymore, so this isn't very useful.
+
 This gets the most-recent heart rate reading from Oura, displaying the beats per minute, and minutes since the last reading. Example output:
 
 `73 | 29m`
