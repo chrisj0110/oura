@@ -4,9 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-chrono = { version = "0.4.38", features = ["serde"] }
+chrono = { version = "0.4.39", features = ["serde"] }
 chrono-tz = "0.10.0"
-reqwest = { version = "0.12.7", features = ["json"] }
-serde = { version = "1.0.210", features = ["derive"] }
-serde_json = "1.0"
-tokio = { version = "1", features = ["full"] }
+idna = "1.0.3"  # specify subdependency version
+reqwest = { version = "0.12.9", features = ["json"] }
+rustls = "0.23.20"  # specify subdependency version
+serde = { version = "1.0.216", features = ["derive"] }
+serde_json = "1.0.133"
+tokio = { version = "1.42.0", features = ["full"] }
