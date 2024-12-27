@@ -5,11 +5,11 @@ use std::env;
 use std::str;
 
 const BPM_ALERT_THRESHOLD: u8 = 80; // if bpm is above this, alert
-const MINUTES_THRESHOLD: u8 = 60; // if it's been this many minutes since the last reading, alert
+const MINUTES_THRESHOLD: u64 = 60; // if it's been this many minutes since the last reading, alert
 
 struct HeartData {
     bpm: u8,
-    minutes_ago: u8,
+    minutes_ago: u64,
 }
 
 #[derive(Deserialize, Debug)]
